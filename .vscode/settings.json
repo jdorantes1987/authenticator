@@ -1,0 +1,8 @@
+{
+    "search.exclude": {
+        "**/venv": true,
+        "**/Scripts": true,
+        "**/share": true
+    },
+    "git.ignoreLimitWarning": true
+}
