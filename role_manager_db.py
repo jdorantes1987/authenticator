@@ -22,20 +22,24 @@ class RoleManagerDB:
         """
 
         try:
-            self.db.connection.connect()
-            cursor = self.db.get_cursor()
-
             # 1. Buscar al usuario
-            cursor.execute(
-                "SELECT id, username FROM users WHERE username = %s", (username,)
+            sql, params = (
+                "SELECT id, username FROM users WHERE username = {}",
+                [username],
             )
+            cur = self.db.execute(sql, params)
+            user_data = cur.fetchone()
+            # intentar normalizar a dict usando description / helpers
+            dict_rows = self.db.rows_to_dict(cur, user_data)
 
-            user_data = cursor.fetchone()
-
-            if not user_data:
+            # asegurar que dict_row es un dict antes de indexar por claves
+            if not isinstance(dict_rows, dict):
+                self.logger.debug(
+                    "User row no es dict (valor=%r), se aborta", dict_rows
+                )
                 return None
 
-            user = User(username=user_data["username"])
+            user = User(username=dict_rows["username"])
 
             # 2. Cargar los roles del usuario y sus permisos
             sql_query = """
@@ -50,15 +54,27 @@ class RoleManagerDB:
                 JOIN roles r ON ur.role_id = r.id
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
                 LEFT JOIN processes p ON rp.process_id = p.id
-                WHERE ur.username = %s
+                WHERE ur.username = {}
             """
-            cursor.execute(sql_query, (user_data["username"],))
-            permissions_data = cursor.fetchall()
-            self.db.close_connection()
+            sql, params = (sql_query, [dict_rows["username"]])
+            cur = self.db.execute(sql, params)
+            permissions_data = cur.fetchall()
+            dict_rows = self.db.rows_to_dict(cur, permissions_data)
+
+            # Normalizar dict_rows a lista de dicts (segura para iterar)
+            if dict_rows is None:
+                dict_rows = []
+            elif isinstance(dict_rows, dict):
+                dict_rows = [dict_rows]
+            elif isinstance(dict_rows, list):
+                # filtrar sólo dicts por seguridad
+                dict_rows = [r for r in dict_rows if isinstance(r, dict)]
+            else:
+                dict_rows = []
 
             # 3. Reconstruir los objetos Role y Permission
             roles_map = {}
-            for row in permissions_data:
+            for row in dict_rows:
                 role_name = row["role_name"]
                 if role_name not in roles_map:
                     roles_map[role_name] = UserRole(name=role_name)
@@ -93,9 +109,13 @@ if __name__ == "__main__":
 
     sys.path.append("..\\conexiones")
     from conn.database_connector import DatabaseConnector
-    from conn.mysql_connector import MySQLConnector
+    from conn.sql_server_connector import SQLServerConnector
 
-    load_dotenv(override=True)
+    env_path = os.path.join("../conexiones", ".env")
+    load_dotenv(
+        dotenv_path=env_path,
+        override=True,
+    )  # Recarga las variables de entorno desde el archivo
 
     # Configurar logging básico si el usuario no proporciona configuración
     logging.basicConfig(
@@ -103,16 +123,17 @@ if __name__ == "__main__":
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
 
-    mysql_connector = MySQLConnector(
-        host=os.environ["DB_HOST"],
-        database=os.environ["DB_NAME"],
-        user=os.environ["DB_USER_ADMIN"],
-        password=os.environ["DB_PASSWORD"],
+    # Para SQL Server
+    sqlserver_connector = SQLServerConnector(
+        host=os.environ["HOST_PRODUCCION_PROFIT"],
+        database=os.environ["DB_NAME_DERECHA_PROFIT"],
+        user=os.environ["DB_USER_PROFIT"],
+        password=os.environ["DB_PASSWORD_PROFIT"],
     )
-    mysql_connector.connect()
-    db = DatabaseConnector(mysql_connector)
+    sqlserver_connector.connect()
+    db = DatabaseConnector(sqlserver_connector)
     role_manager = RoleManagerDB(db)
-    user = role_manager.load_user_by_username("admin")
+    user = role_manager.load_user_by_username("jdorantes")
     if user:
         print(f"--- Verificando permisos para {user.username} ---")
         print(
