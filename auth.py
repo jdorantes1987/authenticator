@@ -8,8 +8,9 @@ class AuthManager:
     logging.config.fileConfig("logging.ini")
     MAX_INTENTOS = 5
 
-    def __init__(self, db):
+    def __init__(self, db, ActiveDirectory=None):
         self.db = db
+        self.AD = ActiveDirectory
         self.logger = logging.getLogger(__class__.__name__)
 
     def _get_user(self, username):
@@ -45,6 +46,28 @@ class AuthManager:
             self.logger.warning(msg)
             return False, msg
 
+        # Intentar autenticación via Active Directory si está configurado
+        if self.AD:
+            if self.AD.authenticate(username, password):
+                self._reset_intentos(idlogin)
+                self.logger.info(
+                    f"Usuario '{username}' autenticado exitosamente via Active Directory"
+                )
+                return True, "Autenticación exitosa via Active Directory"
+            else:
+                self._incrementar_intentos(idlogin, intentos)
+                if intentos + 1 >= self.MAX_INTENTOS:
+                    self._bloquear_usuario(idlogin)
+                    return False, "Usuario bloqueado por demasiados intentos fallidos"
+                self.logger.warning(
+                    f"Autenticación fallida via Active Directory para '{username}'."
+                )
+                return (
+                    False,
+                    f"Autenticación fallida via Active Directory. Intentos restantes: {self.MAX_INTENTOS - (intentos + 1)}",
+                )
+
+        # Autenticación local
         if bcrypt.checkpw(password.encode(), hash_pass.encode()):
             self._reset_intentos(idlogin)
             self.logger.info(f"Usuario '{username}' autenticado exitosamente")
@@ -171,7 +194,10 @@ if __name__ == "__main__":
 
     from dotenv import load_dotenv
 
-    sys.path.append("..\\conexiones")
+    sys.path.append("../conexiones")
+    sys.path.append("../auth_ad")
+
+    from active_directory import ADAuthenticator
     from conn.database_connector import DatabaseConnector
     from conn.sql_server_connector import SQLServerConnector
 
@@ -188,11 +214,22 @@ if __name__ == "__main__":
         "user": os.getenv("DB_USER_PROFIT"),
         "password": os.getenv("DB_PASSWORD_PROFIT"),
     }
+
+    active_directory = {
+        "server_host": os.environ["AD_SERVER_HOST"],
+        "domain": os.environ["AD_DOMAIN"],
+        "use_ssl": False,
+        "port": 389,
+        "search_base": os.environ["AD_SEARCH_BASE"],
+    }
+
+    oActiveDirectory = ADAuthenticator(**active_directory)
+
     sqlserver_connector = SQLServerConnector(**db_credentials)
     sqlserver_connector.connect()
     db = DatabaseConnector(sqlserver_connector)
     db.autocommit(False)
-    auth = AuthManager(db)
+    auth = AuthManager(db=db, ActiveDirectory=oActiveDirectory)
 
     # print("=== Prueba de registro de usuario ===")
     # iduser = input("Usuario: ")
@@ -205,7 +242,7 @@ if __name__ == "__main__":
     iduser_login = input("Usuario para login: ")
     password_login = input("Contraseña: ")
     ok, msg = auth.autenticar(iduser_login, password_login)
-    # print(auth.get_data_user(iduser_login))
+    print(auth.get_data_user(iduser_login))
     print(msg)
 
     # print("=== Prueba de modificación de contraseña ===")
