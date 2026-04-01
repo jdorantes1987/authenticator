@@ -98,6 +98,29 @@ class RoleManagerDB:
             self.logger.error(f"Error al cargar usuario '{username}': {e}")
             return None
 
+    def get_roles(self):
+        """
+        Retorna una lista de todos los roles disponibles en la base de datos.
+        """
+        try:
+            sql = "SELECT id, role_name FROM roles"
+            cur = self.db.execute(sql, [])
+            roles_data = cur.fetchall()
+            dict_rows = self.db.rows_to_dict(cur, roles_data)
+
+            # Normalizar dict_rows a lista de dicts (segura para iterar)
+            if dict_rows is None:
+                return []
+            elif isinstance(dict_rows, dict):
+                return [dict_rows]
+            elif isinstance(dict_rows, list):
+                return [r for r in dict_rows if isinstance(r, dict)]
+            else:
+                return []
+        except Exception as e:
+            self.logger.error(f"Error al obtener roles: {e}")
+            return []
+
 
 # Ejemplo de uso
 if __name__ == "__main__":
@@ -133,23 +156,29 @@ if __name__ == "__main__":
     sqlserver_connector.connect()
     db = DatabaseConnector(sqlserver_connector)
     role_manager = RoleManagerDB(db)
-    user = role_manager.load_user_by_username("jdorantes")
-    if user:
-        print(f"--- Verificando permisos para {user.username} ---")
-        print(
-            f"¿Puede leer en Creyentes? {'✅' if user.has_permission('Creyentes', 'read') else '❌'}"
-        )
-        print(
-            f"¿Puede crear en Creyentes? {'✅' if user.has_permission('Creyentes', 'create') else '❌'}"
-        )
-        print(
-            f"¿Puede actualizar en Creyentes? {'✅' if user.has_permission('Creyentes', 'update') else '❌'}"
-        )
-        print(
-            f"¿Puede eliminar en Creyentes? {'✅' if user.has_permission('Creyentes', 'delete') else '❌'}"
-        )
 
-    else:
-        print("Usuario no encontrado.")
+    roles = role_manager.get_roles()
+    # Convertir varible roles de diccionario a lista
+    role_names = [role["role_name"] for role in roles if isinstance(role, dict)]
+    print(role_names)
+
+    # user = role_manager.load_user_by_username("jdorantes")
+    # if user:
+    #     print(f"--- Verificando permisos para {user.username} ---")
+    #     print(
+    #         f"¿Puede leer en Creyentes? {'✅' if user.has_permission('Creyentes', 'read') else '❌'}"
+    #     )
+    #     print(
+    #         f"¿Puede crear en Creyentes? {'✅' if user.has_permission('Creyentes', 'create') else '❌'}"
+    #     )
+    #     print(
+    #         f"¿Puede actualizar en Creyentes? {'✅' if user.has_permission('Creyentes', 'update') else '❌'}"
+    #     )
+    #     print(
+    #         f"¿Puede eliminar en Creyentes? {'✅' if user.has_permission('Creyentes', 'delete') else '❌'}"
+    #     )
+
+    # else:
+    #     print("Usuario no encontrado.")
 
     db.close_connection()
