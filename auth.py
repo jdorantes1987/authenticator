@@ -187,6 +187,30 @@ class AuthManager:
         """
         return self._get_user(username)
 
+    def get_data_users(self):
+        """
+        Obtiene la información de todos los usuarios.
+        """
+        try:
+            sql = "SELECT username, name, intentos_fallidos, bloqueado FROM users"
+            cur = self.db.execute(sql, [])
+            users_data = cur.fetchall()
+            dict_rows = self.db.rows_to_dict(cur, users_data)
+
+            # Normalizar dict_rows a lista de dicts (segura para iterar)
+            if dict_rows is None:
+                return []
+            elif isinstance(dict_rows, dict):
+                return [dict_rows]
+            elif isinstance(dict_rows, list):
+                # filtrar sólo dicts por seguridad
+                return [r for r in dict_rows if isinstance(r, dict)]
+            else:
+                return []
+        except Exception as e:
+            self.logger.error(f"Error al obtener datos de usuarios: {e}")
+            return []
+
 
 if __name__ == "__main__":
     import os
@@ -195,11 +219,9 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
 
     sys.path.append("../conexiones")
-    sys.path.append("../auth_ad")
 
-    from active_directory import ADAuthenticator
     from conn.database_connector import DatabaseConnector
-    from conn.sql_server_connector import SQLServerConnector
+    from conn.mysql_connector import MySQLConnector
 
     env_path = os.path.join("../conexiones", ".env")
     load_dotenv(
@@ -209,27 +231,21 @@ if __name__ == "__main__":
 
     # Para SQL Server
     db_credentials = {
-        "host": os.getenv("HOST_PRODUCCION_PROFIT"),
-        "database": os.getenv("DB_NAME_DERECHA_PROFIT"),
-        "user": os.getenv("DB_USER_PROFIT"),
-        "password": os.getenv("DB_PASSWORD_PROFIT"),
+        "host": os.getenv("HOST_PRODUCCION_AAPN"),
+        "database": os.getenv("DB_NAME_AAPN"),
+        "user": os.getenv("DB_USER_AAPN"),
+        "password": os.getenv("DB_PASSWORD_AAPN"),
+        "port": 3308,
     }
 
-    active_directory = {
-        "server_host": os.environ["AD_SERVER_HOST"],
-        "domain": os.environ["AD_DOMAIN"],
-        "use_ssl": False,
-        "port": 389,
-        "search_base": os.environ["AD_SEARCH_BASE"],
-    }
-
-    oActiveDirectory = ADAuthenticator(**active_directory)
-
-    sqlserver_connector = SQLServerConnector(**db_credentials)
-    sqlserver_connector.connect()
-    db = DatabaseConnector(sqlserver_connector)
+    mysql_connector = MySQLConnector(**db_credentials)
+    mysql_connector.connect()
+    db = DatabaseConnector(mysql_connector)
     db.autocommit(False)
-    auth = AuthManager(db=db, ActiveDirectory=oActiveDirectory)
+    oAuth = AuthManager(db)
+    dict_users = oAuth.get_data_users()
+    lista = [user["username"] for user in dict_users if isinstance(user, dict)]
+    print(lista)
 
     # print("=== Prueba de registro de usuario ===")
     # iduser = input("Usuario: ")
@@ -238,12 +254,9 @@ if __name__ == "__main__":
     # auth.registrar_usuario(iduser, nombre, password)
     # print("Usuario registrado.\n")
 
-    print("=== Prueba de autenticación ===")
-    iduser_login = input("Usuario para login: ")
-    password_login = input("Contraseña: ")
-    ok, msg = auth.autenticar(iduser_login, password_login)
-    print(auth.get_data_user(iduser_login))
-    print(msg)
+    # print("=== Prueba de autenticación ===")
+    # iduser_login = input("Usuario para login: ")
+    # password_login = input("Contraseña: ")
 
     # print("=== Prueba de modificación de contraseña ===")
     # iduser_mod = input("Usuario para modificar contraseña: ")
