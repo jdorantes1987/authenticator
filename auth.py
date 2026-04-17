@@ -17,7 +17,7 @@ class AuthManager:
         try:
             cur = self.db.get_cursor()
             sql, params = (
-                "SELECT username, password, name, intentos_fallidos, bloqueado, cod_client_asociation FROM users WHERE username = {}",
+                "SELECT id, username, password, name, intentos_fallidos, bloqueado, cod_client_asociation FROM users WHERE username = {}",
                 [username],
             )
             cur = self.db.execute(sql, params)
@@ -192,7 +192,7 @@ class AuthManager:
         Obtiene la información de todos los usuarios.
         """
         try:
-            sql = "SELECT username, name, intentos_fallidos, bloqueado FROM users"
+            sql = "SELECT id, username, name, password, intentos_fallidos, bloqueado FROM users"
             cur = self.db.execute(sql, [])
             users_data = cur.fetchall()
             dict_rows = self.db.rows_to_dict(cur, users_data)
